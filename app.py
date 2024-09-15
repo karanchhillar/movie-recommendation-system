@@ -3,42 +3,64 @@ import streamlit as st
 import pandas as pd
 import requests
 
-def poster(movie_name):
+# Function to fetch movie details (poster, description, genre, vote average)
+def get_movie_details(movie_name):
     api_key = "f9160d595192c3f901ccde3d14f796c1"
     url = f"https://api.themoviedb.org/3/search/movie?api_key={api_key}&query={movie_name}"
 
     try:
         response = requests.get(url)
-        response.raise_for_status()  # Check for request errors
+        response.raise_for_status()
         data = response.json()
 
         if "results" in data and len(data["results"]) > 0:
-            movie_poster = data["results"][0]["poster_path"]
-            return f"https://image.tmdb.org/t/p/w500{movie_poster}"
+            result = data["results"][0]
+            movie_poster = f"https://image.tmdb.org/t/p/w500{result['poster_path']}" if result["poster_path"] else ""
+            description = result["overview"]
+            genre_ids = result["genre_ids"]
+            vote_average = result["vote_average"]
+            return movie_poster, description, genre_ids, vote_average
         else:
             print(f"No results found for movie: {movie_name}")
-            return ""
+            return "", "", [], 0.0
 
     except requests.exceptions.RequestException as e:
         print(f"Error while fetching movie data: {e}")
-        return ""
+        return "", "", [], 0.0
 
+# Function to map genre_ids to genre names
+def get_genres(genre_ids):
+    genre_map = {
+        28: "Action", 12: "Adventure", 16: "Animation", 35: "Comedy", 80: "Crime",
+        99: "Documentary", 18: "Drama", 10751: "Family", 14: "Fantasy", 36: "History",
+        27: "Horror", 10402: "Music", 9648: "Mystery", 10749: "Romance", 878: "Science Fiction",
+        10770: "TV Movie", 53: "Thriller", 10752: "War", 37: "Western"
+    }
+    return [genre_map.get(genre_id, "Unknown") for genre_id in genre_ids]
+
+# Recommendation function
 def recommend(movie):
     index = movies[movies['title'] == movie].index[0]
     distances = sorted(list(enumerate(similarity[index])), reverse=True, key=lambda x: x[1])
     
-    recommended_movie_names = []
-    recommended_movie_posters = []
+    recommended_movies = []
     for i in distances[1:6]:
         movie_name = movies.iloc[i[0]].title
-        poster_path = poster(movie_name)
-        recommended_movie_names.append(movie_name)
-        recommended_movie_posters.append(poster_path)
+        movie_poster, description, genre_ids, vote_average = get_movie_details(movie_name)
+        genres = get_genres(genre_ids)
+        recommended_movies.append({
+            "name": movie_name,
+            "poster": movie_poster,
+            "description": description,
+            "genres": genres,
+            "vote_average": vote_average
+        })
+    
+    return recommended_movies
 
-    return recommended_movie_names, recommended_movie_posters
-
-movies = pickle.load(open('movie_dict.pkl','rb'))
-similarity = pickle.load(open('similarity.pkl','rb'))
+# Load movie data and similarity matrix
+movies = pickle.load(open('movie_dict.pkl', 'rb'))
+similarity = pickle.load(open('similarity.pkl', 'rb'))
 
 movies = pd.DataFrame(movies)
 movie_list = movies['title'].values
@@ -52,46 +74,51 @@ with st.sidebar:
     st.header("Select Your Movie")
     selected_movie = st.selectbox(
         "Type or select a movie from the dropdown",
-        movies['title'].values
+        movie_list
     )
 
 st.subheader("Discover movies similar to your choice!")
 
-# Show recommendations in a column
+# Show recommendations in rows with details and posters side-by-side
 if st.button('Show Recommendation'):
     with st.spinner("Fetching recommendations..."):
-        names, posters = recommend(selected_movie)
+        recommended_movies = recommend(selected_movie)
 
     st.write("### Top 5 Recommended Movies:")
 
-    # Set fixed image width for consistency
-    image_width = 180  # Adjust this width according to your needs
+    # Loop through recommended movies and display them with details and poster
+    for i, movie in enumerate(recommended_movies):
+        col1, col2 = st.columns([3, 2])  # Set the ratio for text and image
+        with col1:
+            # st.write(f"**{i+1}. {movie['name']}**")  # Numbering the movies
+            st.markdown(f"""
+            <h3 style='font-size:24px; font-weight:bold;'>{i+1}. {movie['name']}</h3>
+            """, unsafe_allow_html=True)
+            st.write(f"**Genres**: {', '.join(movie['genres'])}")
+            st.write(f"**Rating**: {movie['vote_average']} / 10")
+            st.write(f"**Overview**: {movie['description']}")
+        with col2:
+            st.image(movie['poster'], width=200)
+        st.write("---")
 
-    # Adjust spacing between columns
-    col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 1, 1], gap="medium")
-
-    with col1:
-        st.write(names[0], align="center")
-        st.image(posters[0], width=image_width)
-
-    with col2:
-        st.write(names[1], align="center")
-        st.image(posters[1], width=image_width)
-
-    with col3:
-        st.write(names[2], align="center")
-        st.image(posters[2], width=image_width)
-
-    with col4:
-        st.write(names[3], align="center")
-        st.image(posters[3], width=image_width)
-
-    with col5:
-        st.write(names[4], align="center")
-        st.image(posters[4], width=image_width)
-
-# Footer
+# Improved Footer with Better UI and Shorter Height
 st.markdown("""
-    <hr style="border:2px solid #f1f1f1">
-    <center>Created by Karan Chhillar</center>
-""", unsafe_allow_html=True)
+    <style>
+    footer {visibility: hidden;}
+    .footer {
+        position: fixed;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        background-color: #262730;
+        color: white;
+        text-align: center;
+        padding: 10px 0;  /* Reduced height of the footer */
+        font-size: 14px;
+        border-top: 1px solid #f1f1f1;
+    }
+    </style>
+    <div class="footer">
+        <p>Created by <strong>Karan Chhillar</strong> | © 2024 All rights reserved.</p>
+    </div>
+    """, unsafe_allow_html=True)
