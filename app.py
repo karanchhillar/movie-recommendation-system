@@ -19,14 +19,24 @@ def get_movie_details(movie_name):
             description = result["overview"]
             genre_ids = result["genre_ids"]
             vote_average = result["vote_average"]
-            return movie_poster, description, genre_ids, vote_average
+            id = result['id']
+
+            s_data = movies[movies['id'] == id]
+            s = s_data['title'].values[0] 
+            s = s.replace(" " , "")
+            s = s.lower()
+            nameOfMovie = s_data['title'].values[0] 
+
+            link = f"https://www.themoviedb.org/movie/{id}-{nameOfMovie}"
+
+            return movie_poster, description, genre_ids, vote_average, link
         else:
             print(f"No results found for movie: {movie_name}")
-            return "", "", [], 0.0
+            return "", "", [], 0.0, ""
 
     except requests.exceptions.RequestException as e:
         print(f"Error while fetching movie data: {e}")
-        return "", "", [], 0.0
+        return "", "", [], 0.0, ""
 
 # Function to map genre_ids to genre names
 def get_genres(genre_ids):
@@ -46,14 +56,15 @@ def recommend(movie):
     recommended_movies = []
     for i in distances[1:6]:
         movie_name = movies.iloc[i[0]].title
-        movie_poster, description, genre_ids, vote_average = get_movie_details(movie_name)
+        movie_poster, description, genre_ids, vote_average, link = get_movie_details(movie_name)
         genres = get_genres(genre_ids)
         recommended_movies.append({
             "name": movie_name,
             "poster": movie_poster,
             "description": description,
             "genres": genres,
-            "vote_average": vote_average
+            "vote_average": vote_average,
+            "link": link
         })
     
     return recommended_movies
@@ -79,26 +90,27 @@ with st.sidebar:
 
 st.subheader("Discover movies similar to your choice!")
 
-# Show recommendations in rows with details and posters side-by-side
+# Show recommendations with clickable links
 if st.button('Show Recommendation'):
     with st.spinner("Fetching recommendations..."):
         recommended_movies = recommend(selected_movie)
 
     st.write("### Top 5 Recommended Movies:")
 
-    # Loop through recommended movies and display them with details and poster
+    # Loop through recommended movies and display them with details, posters, and clickable links
     for i, movie in enumerate(recommended_movies):
         col1, col2 = st.columns([3, 2])  # Set the ratio for text and image
         with col1:
-            # st.write(f"**{i+1}. {movie['name']}**")  # Numbering the movies
             st.markdown(f"""
-            <h3 style='font-size:24px; font-weight:bold;'>{i+1}. {movie['name']}</h3>
-            """, unsafe_allow_html=True)
+            <h3 style='font-size:24px; font-weight:bold;'>
+            <a href="{movie['link']}" target="_blank">{i+1}. {movie['name']}</a></h3>
+            """, unsafe_allow_html=True)  # Making the movie name clickable
             st.write(f"**Genres**: {', '.join(movie['genres'])}")
             st.write(f"**Rating**: {movie['vote_average']} / 10")
             st.write(f"**Overview**: {movie['description']}")
         with col2:
-            st.image(movie['poster'], width=200)
+            if movie['poster']:  # Check if poster exists
+                st.markdown(f'<a href="{movie['link']}" target="_blank"><img src="{movie["poster"]}" width="200"></a>', unsafe_allow_html=True)  # Making the poster clickable
         st.write("---")
 
 # Improved Footer with Better UI and Shorter Height
